@@ -1,14 +1,14 @@
 from flask import Flask, request, jsonify
-
-# import tensorflow as tf
-
+import tensorflow as tf
 import tensorflow.keras.utils as image
 from PIL import Image
 import numpy as np
 
-from model import model
 
 app = Flask(__name__)
+
+model = tf.keras.saving.load_model("model/ct_mri_classifier_5epochs.h5")  # type: ignore
+
 IMAGE_SIZE = (152, 152)
 
 
@@ -26,7 +26,7 @@ def preprocess_image(image: Image.Image):
     """
     image = image.resize(IMAGE_SIZE)
     image = np.array(image)
-    if len(image.shape) == 2:  # Grayscale to RGB
+    if len(image.shape) == 2:
         image = np.stack((image,) * 3, axis=-1)
     image = image / 255.0
     image = np.expand_dims(image, axis=0)
@@ -64,5 +64,5 @@ def predict():
         return jsonify({"error": str(e)})
 
 
-if __name__ == "__main__":
-    app.run(host="0.0.0.0", port=8000)
+# if __name__ == "__main__":
+#     app.run(host="0.0.0.0", port=8000)

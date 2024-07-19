@@ -3,7 +3,7 @@ import tensorflow as tf
 import tensorflow.keras.utils as image
 from PIL import Image
 import numpy as np
-
+import logging
 
 app = Flask(__name__)
 
@@ -45,10 +45,12 @@ def predict():
     JSON object containing the predicted class of the input image.
     """
     if "file" not in request.files:
+        logging.error("No file part")
         return jsonify({"error": "No file part"})
 
     file = request.files["file"]
     if file.filename == "":
+        logging.error("No selected file")
         return jsonify({"error": "No selected file"})
 
     try:
@@ -57,12 +59,14 @@ def predict():
 
         prediction = model.predict(processed_image)
         predicted_class = int(prediction[0][0] > 0.5)
-
+        logging.info(f"Predicted class: {predicted_class}")
         return jsonify({"predicted_class": predicted_class})
 
     except Exception as e:
+        logging.error(f"Error: {e}")
         return jsonify({"error": str(e)})
 
 
-# if __name__ == "__main__":
-#     app.run(host="0.0.0.0", port=8000)
+if __name__ == "__main__":
+    logging.info("Flask app started")
+    app.run(host="0.0.0.0", port=8000)

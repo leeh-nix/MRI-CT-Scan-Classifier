@@ -7,7 +7,7 @@ import logging
 
 app = Flask(__name__)
 
-model = tf.keras.saving.load_model("model/ct_mri_classifier_5epochs.h5")  # type: ignore
+model = tf.keras.models.load_model("model/ct_mri_classifier_5epochs.h5")  # type: ignore
 
 IMAGE_SIZE = (152, 152)
 

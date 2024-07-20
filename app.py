@@ -1,55 +1,50 @@
 from flask import Flask, request, jsonify
-import tensorflow as tf
-import tensorflow.keras.utils as image
+import logging
 from PIL import Image
 import os
-import logging
-
+import tempfile
 from utils import convert_dicom_to_jpg, preprocess_image, classify_image
 
 app = Flask(__name__)
 
+# Configure logging
+logging.basicConfig(level=logging.DEBUG)
+
 
 @app.route("/predict", methods=["POST"])
 def predict():
-    """
-    A function that predicts the classification of an image received via POST request.
-    It saves the received DICOM file, converts it to JPEG, preprocesses the image, classifies it,
-    and returns the classification result. Finally, it cleans up temporary files.
+    try:
+        if "file" not in request.files:
+            logging.error("No file provided")
+            return jsonify({"error": "No file provided"}), 400
 
-    Parameters:
-        None
+        file = request.files["file"]
 
-    Returns:
-        JSON: A JSON response containing the classification result.
-    """
-    if "file" not in request.files:
-        return jsonify({"error": "No file provided"}), 400
+        if not file.filename.endswith(".dcm"):
+            logging.error("File is not a DICOM file")
+            return jsonify({"error": "File is not a DICOM file"}), 400
 
-    file = request.files["file"]
+        # Save the DICOM file to a temporary location
+        with tempfile.TemporaryDirectory() as tmpdirname:
+            dicom_path = os.path.join(tmpdirname, file.filename)
+            file.save(dicom_path)
+            logging.info(f"File saved to {dicom_path}")
 
-    if not file.filename.endswith(".dcm"):
-        return jsonify({"error": "File is not a DICOM file"}), 400
+            # Convert the DICOM file to JPEG
+            jpg_path = dicom_path.replace(".dcm", ".jpg")
+            convert_dicom_to_jpg(dicom_path, jpg_path)
+            logging.info(f"DICOM converted to {jpg_path}")
 
-    # Save the DICOM file to a temporary location
-    dicom_path = os.path.join("/tmp", file.filename)
-    file.save(dicom_path)
+            image = Image.open(jpg_path)
 
-    # Convert the DICOM file to JPEG
-    jpg_path = dicom_path.replace(".dcm", ".jpg")
-    convert_dicom_to_jpg(dicom_path, jpg_path)
+            processed_image = preprocess_image(image)
+            result = classify_image(processed_image)
 
-    image = Image.open(jpg_path)
+            return jsonify({"classification": result})
 
-    processed_image = preprocess_image(image)
-
-    result = classify_image(processed_image)
-
-    # Clean up temporary files
-    os.remove(dicom_path)
-    os.remove(jpg_path)
-
-    return jsonify({"classification": result})
+    except Exception as e:
+        logging.error(f"Error occurred: {e}")
+        return jsonify({"error": "An internal error occurred"}), 500
 
 
 if __name__ == "__main__":

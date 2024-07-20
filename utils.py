@@ -3,7 +3,7 @@ import tensorflow as tf
 import pydicom
 from PIL import Image
 from tensorflow.keras.models import load_model
-
+import logging
 
 model = load_model("model/ct_mri_classifier_5epochs.h5")  # type: ignore
 
@@ -22,12 +22,17 @@ def convert_dicom_to_jpg(dicom_path, jpg_path):
     Returns:
         None
     """
-    dicom = pydicom.dcmread(dicom_path)
-    img = dicom.pixel_array
-    # Convert 16-bit grayscale to 8-bit
-    img_scaled = np.uint8(img / np.max(img) * 255)  # Scale and convert to 8-bit
-    img_mem = Image.fromarray(img_scaled)  # Create image from scaled array
-    img_mem.save(jpg_path)
+    try:
+        dicom = pydicom.dcmread(dicom_path)
+        img = dicom.pixel_array
+        # Convert 16-bit grayscale to 8-bit
+        img_scaled = np.uint8(img / np.max(img) * 255)  # Scale and convert to 8-bit
+        img_mem = Image.fromarray(img_scaled)  # Create image from scaled array
+        img_mem.save(jpg_path)
+        logging.info(f"Converted DICOM {dicom_path} to JPEG {jpg_path}")
+    except Exception as e:
+        logging.error(f"Failed to convert DICOM to JPEG: {e}")
+        raise
 
 
 def preprocess_image(image: Image.Image):
@@ -42,13 +47,18 @@ def preprocess_image(image: Image.Image):
     Returns:
     numpy.array - The preprocessed image ready for prediction.
     """
-    image = image.resize(IMAGE_SIZE)
-    image = np.array(image)
-    if len(image.shape) == 2:
-        image = np.stack((image,) * 3, axis=-1)
-    image = image / 255.0
-    image = np.expand_dims(image, axis=0)
-    return image
+    try:
+        image = image.resize(IMAGE_SIZE)
+        image = np.array(image)
+        if len(image.shape) == 2:
+            image = np.stack((image,) * 3, axis=-1)
+        image = image / 255.0
+        image = np.expand_dims(image, axis=0)
+        logging.info("Image preprocessing successful")
+        return image
+    except Exception as e:
+        logging.error(f"Failed to preprocess image: {e}")
+        raise
 
 
 # Function to classify image
@@ -62,5 +72,10 @@ def classify_image(image):
     Returns:
         str: The classification of the image. Either "MRI" or "CT".
     """
-    prediction = model.predict(image)
-    return "MRI" if prediction[0][0] > 0.5 else "CT"
+    try:
+        prediction = model.predict(image)
+        logging.info("Image classification successful")
+        return "MRI" if prediction[0][0] > 0.5 else "CT"
+    except Exception as e:
+        logging.error(f"Failed to classify image: {e}")
+        raise

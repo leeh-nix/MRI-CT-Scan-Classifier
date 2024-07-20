@@ -2,71 +2,55 @@ from flask import Flask, request, jsonify
 import tensorflow as tf
 import tensorflow.keras.utils as image
 from PIL import Image
-import numpy as np
+import os
 import logging
 
+from utils import convert_dicom_to_jpg, preprocess_image, classify_image
+
 app = Flask(__name__)
-
-model = tf.keras.models.load_model("model/ct_mri_classifier_5epochs.h5")  # type: ignore
-
-IMAGE_SIZE = (152, 152)
-
-
-def preprocess_image(image: Image.Image):
-    """
-    Preprocesses an image for prediction by resizing, converting to a numpy array,
-    converting grayscale to RGB if needed, normalizing pixel values,
-    and expanding dimensions for prediction.
-
-    Parameters:
-    image: Image.Image - The input image to be preprocessed.
-
-    Returns:
-    numpy.array - The preprocessed image ready for prediction.
-    """
-    image = image.resize(IMAGE_SIZE)
-    image = np.array(image)
-    if len(image.shape) == 2:
-        image = np.stack((image,) * 3, axis=-1)
-    image = image / 255.0
-    image = np.expand_dims(image, axis=0)
-    return image
 
 
 @app.route("/predict", methods=["POST"])
 def predict():
     """
-    A function to predict the class of an image based on the processed image data.
+    A function that predicts the classification of an image received via POST request.
+    It saves the received DICOM file, converts it to JPEG, preprocesses the image, classifies it,
+    and returns the classification result. Finally, it cleans up temporary files.
 
     Parameters:
-    None
+        None
 
     Returns:
-    JSON object containing the predicted class of the input image.
+        JSON: A JSON response containing the classification result.
     """
     if "file" not in request.files:
-        logging.error("No file part")
-        return jsonify({"error": "No file part"})
+        return jsonify({"error": "No file provided"}), 400
 
     file = request.files["file"]
-    if file.filename == "":
-        logging.error("No selected file")
-        return jsonify({"error": "No selected file"})
 
-    try:
-        image = Image.open(file.stream)
-        processed_image = preprocess_image(image)
+    if not file.filename.endswith(".dcm"):
+        return jsonify({"error": "File is not a DICOM file"}), 400
 
-        prediction = model.predict(processed_image)
-        predicted_class = int(prediction[0][0] > 0.5)
-        logging.info(f"Predicted class: {predicted_class}")
-        return jsonify({"predicted_class": predicted_class})
+    # Save the DICOM file to a temporary location
+    dicom_path = os.path.join("/tmp", file.filename)
+    file.save(dicom_path)
 
-    except Exception as e:
-        logging.error(f"Error: {e}")
-        return jsonify({"error": str(e)})
+    # Convert the DICOM file to JPEG
+    jpg_path = dicom_path.replace(".dcm", ".jpg")
+    convert_dicom_to_jpg(dicom_path, jpg_path)
+
+    image = Image.open(jpg_path)
+
+    processed_image = preprocess_image(image)
+
+    result = classify_image(processed_image)
+
+    # Clean up temporary files
+    os.remove(dicom_path)
+    os.remove(jpg_path)
+
+    return jsonify({"classification": result})
 
 
 if __name__ == "__main__":
-    logging.info("Flask app started")
-    app.run(host="0.0.0.0", port=8000)
+    app.run(host="0.0.0.0", port=8080)
